@@ -1,6 +1,5 @@
 package com.tcrs.tcrs_backend.model;
 
-
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
@@ -22,7 +21,8 @@ public class AuditLog {
     // who performed the action
     private String performedByEmail;
 
-    // what action was performed e.g. "COMPLAINT_CREATED", "STATUS_UPDATED", "USER_REGISTERED"
+    // what action was performed e.g. "COMPLAINT_CREATED", "STATUS_UPDATED",
+    // "USER_REGISTERED"
     private String action;
 
     // which entity was affected
