@@ -11,6 +11,7 @@ import org.springframework.security.config.annotation.authentication.configurati
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -24,43 +25,35 @@ import java.util.List;
 
 @Configuration
 @EnableWebSecurity
-@EnableMethodSecurity   // allows @PreAuthorize on controller methods
+@EnableMethodSecurity
 public class SecurityConfig {
 
-    @Autowired
-    private JwtFilter jwtFilter;
+    @Autowired private JwtFilter jwtFilter;
+    @Autowired private UserDetailsServiceImpl userDetailsService;
 
-    @Autowired
-    private UserDetailsServiceImpl userDetailsService;
-
-    // ── Password encoder ───────────────────────────────────────────────────────
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
-    // ── Authentication provider ────────────────────────────────────────────────
     @Bean
     public AuthenticationProvider authenticationProvider() {
-        // Spring Security 7.x — no-arg constructor removed, pass UserDetailsService directly
+        // Spring Security 7.x — pass UserDetailsService to constructor
         DaoAuthenticationProvider provider = new DaoAuthenticationProvider(userDetailsService);
         provider.setPasswordEncoder(passwordEncoder());
         return provider;
     }
 
-    // ── Authentication manager ─────────────────────────────────────────────────
     @Bean
-    public AuthenticationManager authenticationManager(
-            AuthenticationConfiguration config) throws Exception {
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
         return config.getAuthenticationManager();
     }
 
-    // ── CORS configuration ─────────────────────────────────────────────────────
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowedOrigins(List.of("http://localhost:3000"));
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        config.setAllowedMethods(List.of("GET","POST","PUT","PATCH","DELETE","OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
 
@@ -69,44 +62,35 @@ public class SecurityConfig {
         return source;
     }
 
-    // ── Security filter chain ──────────────────────────────────────────────────
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
-            // disable CSRF — not needed for stateless JWT APIs
-            .csrf(csrf -> csrf.disable())
-
-            // enable CORS with our config above
+            .csrf(AbstractHttpConfigurer::disable)
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-
-            // stateless — no HTTP sessions
-            .sessionManagement(session ->
-                session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-
-            // route-level access rules
+            .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .authenticationProvider(authenticationProvider())
+            .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
             .authorizeHttpRequests(auth -> auth
-
-                // public routes — no token needed
+                // Public routes
                 .requestMatchers(
                     "/api/auth/**",
-                    "/api/health"
+                    "/api/health",
+                    "/api/complaints/nearby",
+                    "/api/complaints/map"
                 ).permitAll()
 
-                // admin only routes
+                // Admin only
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
 
-                // auditor only routes
-                .requestMatchers("/api/audit/**").hasRole("AUDITOR")
+                // Auditor + Admin
+                .requestMatchers("/api/audit/**").hasAnyRole("ADMIN","AUDITOR")
 
-                // all other routes require any valid login
+                // Official only
+                .requestMatchers("/api/complaints/assigned").hasRole("OFFICIAL")
+
+                // All authenticated users
                 .anyRequest().authenticated()
-            )
-
-            // plug in our JWT filter before the default auth filter
-            .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
-
-            // use our custom auth provider
-            .authenticationProvider(authenticationProvider());
+            );
 
         return http.build();
     }

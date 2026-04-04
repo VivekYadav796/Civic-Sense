@@ -27,7 +27,7 @@ public class User {
 
     private String password;
 
-    // "CITIZEN", "ADMIN", "AUDITOR"
+    // "CITIZEN", "ADMIN", "AUDITOR", "OFFICIAL"
     private String role;
 
     // "LOCAL" for email/password, "GOOGLE" for google oauth
